@@ -8,9 +8,15 @@ const io = require('socket.io')(http,{
 });
 
 let players = [];
-let deck = [1, 1, 1, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 7, 8];
+let deck = initDeck();
 let gameStarted = false;
 shuffle(deck);
+
+function initDeck(){
+    let deck = [1, 1, 1, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 7, 8];
+    shuffle(deck);
+    return deck;
+}
 
 // Fisher-Yates shuffle
 function shuffle(array) {
@@ -21,11 +27,11 @@ function shuffle(array) {
 }
 
 function startGame(){
-    console.log('called');
     players.forEach(function(p){
         p.socket.emit('dealCard', deck.pop());
     });
     players[0].socket.emit('dealCard', deck.pop());
+    io.emit('currentTurn', players[0].id);
     io.emit('deckRemaining', deck.length);
     gameStarted = true;
 }
@@ -43,24 +49,38 @@ io.on('connection', function (socket) {
 
     if (players.length === 1) {
         io.emit('isPlayerA');
-    };
+    }
 
     socket.on('startGame', function(){
         io.emit('startGame');
         startGame();
     })
 
-    socket.on('dealCard', function () {
-        io.emit('dealCard');
-    });
-
-    socket.on('cardPlayed', function (gameObject, isPlayerA) {
-        io.emit('cardPlayed', gameObject, isPlayerA);
+    socket.on('cardPlayed', function (gameObject) {
+        io.emit('cardPlayed', gameObject, socket.id);
+        let position = 0;
+        players.some(function(player, index){
+            if(player.id === socket.id){
+                position = index;
+                return true;
+            } else return false;
+        })
+        if(position === players.length - 1){
+            position = 0;
+        } else {
+            position += 1;
+        }
+        players[position].socket.emit('dealCard', deck.pop());
+        io.emit('currentTurn', players[position].id);
     });
 
     socket.on('disconnect', function () {
         console.log('A user disconnected: ' + socket.id);
         players = players.filter(player => player.id !== socket.id);
+        if(players.length === 0 && gameStarted){
+            gameStarted = false;
+            deck = initDeck();
+        }
     });
 });
 

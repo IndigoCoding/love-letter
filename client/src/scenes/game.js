@@ -11,9 +11,6 @@ export default class Game extends Phaser.Scene {
     }
 
     preload() {
-        this.load.image('cyanCardFront', 'src/assets/CyanCardFront.png');
-        this.load.image('cyanCardBack', 'src/assets/CyanCardBack.png');
-        this.load.image('magentaCardFront', 'src/assets/MagentaCardFront.png');
         this.load.image('guard', 'src/assets/guard.jpg');
         this.load.image('priest', 'src/assets/priest.jpg');
         this.load.image('baron', 'src/assets/baron.jpg');
@@ -25,13 +22,51 @@ export default class Game extends Phaser.Scene {
     }
 
     create() {
+        let self = this;
         this.isPlayerA = false;
+        this.isMyTurn = false;
+        this.handSize = 0;
         this.opponentCards = [];
 
-        this.dealText = this.add.text (75, 350, ['START GAME']).setFontSize(18).setFontFamily('Trebuchet MS').setColor('#00ffff');
-        let self = this;
+        this.initDealText();
+        this.initOtherComponent();
+        this.initPlayCardEvent();
 
-        this.dealer = new Dealer(this);
+        this.socket = io('http://localhost:3000');
+
+        this.socket.on('currentTurn', function(id){
+            self.isMyTurn = self.socket.id === id;
+        })
+
+        this.socket.on('isPlayerA', function () {
+            self.isPlayerA = true;
+            self.dealText.setVisible(true);
+        })
+
+        this.socket.on('dealCard', function (cardValue) {
+            self.handSize += 1;
+            self.dealer.dealCard(cardValue, self.handSize);
+            self.dealText.setVisible(false);
+        })
+
+        this.socket.on('cardPlayed', function (gameObject, socketId) {
+            if (socketId !== self.socket.id) {
+                let sprite = gameObject.textureKey;
+                self.dropZone.data.values.cards++;
+                let card = new Card(self);
+                card.render(((self.dropZone.x - 350) + (self.dropZone.data.values.cards * 50)), (self.dropZone.y), sprite).disableInteractive();
+            }
+        })
+    }
+
+    update() {
+
+    }
+
+    initDealText(){
+        var self = this;
+        this.dealText = this.add.text (75, 350, ['START GAME']).setFontSize(18).setFontFamily('Trebuchet MS')
+            .setColor('#00ffff').setVisible(false).setInteractive();
 
         this.dealText.on('pointerdown', function () {
             self.socket.emit("startGame");
@@ -44,7 +79,10 @@ export default class Game extends Phaser.Scene {
         this.dealText.on('pointerout', function () {
             self.dealText.setColor('#00ffff');
         })
+    }
 
+    initPlayCardEvent() {
+        let self = this;
         this.input.on('drag', function (pointer, gameObject, dragX, dragY) {
             gameObject.x = dragX;
             gameObject.y = dragY;
@@ -64,45 +102,23 @@ export default class Game extends Phaser.Scene {
         })
 
         this.input.on('drop', function (pointer, gameObject, dropZone) {
-            dropZone.data.values.cards++;
-            gameObject.x = (dropZone.x - 350) + (dropZone.data.values.cards * 50);
-            gameObject.y = dropZone.y;
-            gameObject.disableInteractive();
-            self.socket.emit('cardPlayed', gameObject, self.isPlayerA);
-        })
-
-        this.zone = new Zone(this);
-        this.dropZone = this.zone.renderZone();
-        this.outline = this.zone.renderOutline(this.dropZone);
-
-        this.socket = io('http://localhost:3000');
-
-        this.socket.on('connect', function () {
-            console.log('Connected!');
-        });
-
-        this.socket.on('isPlayerA', function () {
-            self.isPlayerA = true;
-            self.dealText.setInteractive();
-        })
-
-        this.socket.on('dealCard', function (cardValue) {
-            self.dealer.dealCard(cardValue);
-            self.dealText.disableInteractive();
-        })
-
-        this.socket.on('cardPlayed', function (gameObject, isPlayerA) {
-            if (isPlayerA !== self.isPlayerA) {
-                let sprite = gameObject.textureKey;
-                self.opponentCards.shift().destroy();
-                self.dropZone.data.values.cards++;
-                let card = new Card(self);
-                card.render(((self.dropZone.x - 350) + (self.dropZone.data.values.cards * 50)), (self.dropZone.y), sprite).disableInteractive();
+            if(self.isMyTurn){
+                dropZone.data.values.cards++;
+                gameObject.x = (dropZone.x - 350) + (dropZone.data.values.cards * 50);
+                gameObject.y = dropZone.y;
+                gameObject.disableInteractive();
+                self.socket.emit('cardPlayed', gameObject);
+            } else {
+                gameObject.x = gameObject.input.dragStartX;
+                gameObject.y = gameObject.input.dragStartY;
             }
         })
     }
 
-    update() {
-
+    initOtherComponent() {
+        this.dealer = new Dealer(this);
+        this.zone = new Zone(this);
+        this.dropZone = this.zone.renderZone();
+        this.outline = this.zone.renderOutline(this.dropZone);
     }
 }

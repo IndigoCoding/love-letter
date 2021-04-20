@@ -25,9 +25,9 @@ export default class Dealer {
             }
         }
 
-        this.dealCard = (cardValue) => {
+        this.dealCard = (cardValue, handSize = 0) => {
             let card = new Card(scene, cardValue);
-            card.render(475, 650, cardMap[cardValue]);
+            card.render(475 + handSize * 50, 650, cardMap[cardValue]);
         }
     }
 }
