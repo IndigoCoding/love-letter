@@ -11,6 +11,7 @@ export default class Game extends Phaser.Scene {
     }
 
     preload() {
+        this.load.html('nameform', 'src/assets/text/nameform.html');
         this.load.image('guard', 'src/assets/guard.jpg');
         this.load.image('priest', 'src/assets/priest.jpg');
         this.load.image('baron', 'src/assets/baron.jpg');
@@ -27,12 +28,11 @@ export default class Game extends Phaser.Scene {
         this.isMyTurn = false;
         this.handSize = 0;
         this.opponentCards = [];
+        this.socket = io('http://localhost:3000');
 
         this.initDealText();
         this.initOtherComponent();
         this.initPlayCardEvent();
-
-        this.socket = io('http://localhost:3000');
 
         this.socket.on('currentTurn', function(id){
             self.isMyTurn = self.socket.id === id;
@@ -104,7 +104,7 @@ export default class Game extends Phaser.Scene {
         this.input.on('drop', function (pointer, gameObject, dropZone) {
             if(self.isMyTurn){
                 dropZone.data.values.cards++;
-                gameObject.x = (dropZone.x - 350) + (dropZone.data.values.cards * 50);
+                gameObject.x = (dropZone.x - 400) + (dropZone.data.values.cards * 50);
                 gameObject.y = dropZone.y;
                 gameObject.disableInteractive();
                 self.socket.emit('cardPlayed', gameObject);
@@ -116,9 +116,61 @@ export default class Game extends Phaser.Scene {
     }
 
     initOtherComponent() {
+        var self = this;
+        let text = this.add.text(300, 10, 'Please enter your name');
+        let playerListLabel = this.add.text(300, 70, 'Player List:');
+        let playerList = this.add.text(450, 70, '');
+        this.socket.on('playerState', function(list){
+            playerList.setText(list);
+        });
         this.dealer = new Dealer(this);
         this.zone = new Zone(this);
         this.dropZone = this.zone.renderZone();
         this.outline = this.zone.renderOutline(this.dropZone);
+
+        let element = this.add.dom(400, 0).createFromCache('nameform');
+
+        element.addListener('click');
+
+        element.on('click', function (event) {
+
+            if (event.target.name === 'playButton')
+            {
+                var inputText = this.getChildByName('nameField');
+
+                //  Have they entered anything?
+                if (inputText.value !== '')
+                {
+                    //  Turn off the click events
+                    this.removeListener('click');
+
+                    //  Hide the login element
+                    this.setVisible(false);
+
+                    //  Populate the text with whatever they typed in
+                    text.setText('Welcome ' + inputText.value);
+                    self.socket.emit('registerName', inputText.value);
+                }
+                else
+                {
+                    //  Flash the prompt
+                    this.scene.tweens.add({
+                        targets: text,
+                        alpha: 0.2,
+                        duration: 250,
+                        ease: 'Power3',
+                        yoyo: true
+                    });
+                }
+            }
+
+        });
+
+        this.tweens.add({
+            targets: element,
+            y: 300,
+            duration: 3000,
+            ease: 'Power3'
+        });
     }
 }

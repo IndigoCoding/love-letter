@@ -30,21 +30,30 @@ function startGame(){
     players.forEach(function(p){
         p.socket.emit('dealCard', deck.pop());
     });
-    players[0].socket.emit('dealCard', deck.pop());
-    io.emit('currentTurn', players[0].id);
-    io.emit('deckRemaining', deck.length);
+    dealCard(0);
     gameStarted = true;
+}
+
+function dealCard(position){
+    let card = deck.pop();
+    players[position].socket.emit('dealCard', card);
+    players[position].hand.push(card);
+    io.emit('currentTurn', players[position].id);
+    io.emit('deckRemaining', deck.length);
 }
 
 io.on('connection', function (socket) {
     console.log('A user connected: ' + socket.id);
+    socket.emit('playerState', players.map(player => player.name));
     if(gameStarted){
         socket.disconnect();
     }
 
     players.push({
         id: socket.id,
-        socket: socket
+        socket: socket,
+        name: null,
+        hand: []
     });
 
     if (players.length === 1) {
@@ -54,6 +63,17 @@ io.on('connection', function (socket) {
     socket.on('startGame', function(){
         io.emit('startGame');
         startGame();
+    })
+
+    socket.on('registerName', function(name){
+        players = players.map((player) => {
+            if(player.id === socket.id){
+                return {...player, name};
+            } else {
+                return player;
+            }
+        })
+        io.emit('playerState', players.map(player => player.name));
     })
 
     socket.on('cardPlayed', function (gameObject) {
@@ -70,8 +90,7 @@ io.on('connection', function (socket) {
         } else {
             position += 1;
         }
-        players[position].socket.emit('dealCard', deck.pop());
-        io.emit('currentTurn', players[position].id);
+        dealCard(position);
     });
 
     socket.on('disconnect', function () {

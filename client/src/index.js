@@ -5,7 +5,10 @@ const config = {
     type: Phaser.AUTO,
     parent: 'phaser-example',
     width: 1280,
-    height: 780,
+    height: 700,
+    dom: {
+        createContainer: true
+    },
     scene: [
         Game
     ]
