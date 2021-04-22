@@ -1,6 +1,7 @@
 import Card from '../helpers/card';
 import Zone from '../helpers/zone';
 import Dealer from '../helpers/dealer';
+import SelectPlayer from './selectPlayer';
 import io from 'socket.io-client';
 
 export default class Game extends Phaser.Scene {
@@ -26,8 +27,9 @@ export default class Game extends Phaser.Scene {
         let self = this;
         this.isPlayerA = false;
         this.isMyTurn = false;
+        this.hand = [];
         this.handSize = 0;
-        this.opponentCards = [];
+        this.playerList = [];
         this.socket = io('http://localhost:3000');
 
         this.initDealText();
@@ -45,7 +47,7 @@ export default class Game extends Phaser.Scene {
 
         this.socket.on('dealCard', function (cardValue) {
             self.handSize += 1;
-            self.dealer.dealCard(cardValue, self.handSize);
+            self.hand.push(self.dealer.dealCard(cardValue, self.handSize));
             self.dealText.setVisible(false);
         })
 
@@ -55,6 +57,18 @@ export default class Game extends Phaser.Scene {
                 self.dropZone.data.values.cards++;
                 let card = new Card(self);
                 card.render(((self.dropZone.x - 350) + (self.dropZone.data.values.cards * 50)), (self.dropZone.y), sprite).disableInteractive();
+            }
+        })
+
+        this.socket.on('execute', function(socketId, chooseNumber, isSuccessful){
+            if(isSuccessful){
+                let sprite = self.dealer.getTextureKey(chooseNumber);
+                self.dropZone.data.values.cards++;
+                let card = new Card(self);
+                card.render(((self.dropZone.x - 350) + (self.dropZone.data.values.cards * 50)), (self.dropZone.y), sprite).disableInteractive();
+                if (socketId === self.socket.id){
+                    self.hand[0].destroy();
+                }
             }
         })
     }
@@ -103,11 +117,12 @@ export default class Game extends Phaser.Scene {
 
         this.input.on('drop', function (pointer, gameObject, dropZone) {
             if(self.isMyTurn){
-                dropZone.data.values.cards++;
-                gameObject.x = (dropZone.x - 400) + (dropZone.data.values.cards * 50);
-                gameObject.y = dropZone.y;
-                gameObject.disableInteractive();
-                self.socket.emit('cardPlayed', gameObject);
+                self.cardPlayed = gameObject;
+                if(gameObject.data.values.config.targetPlayer || gameObject.data.values.config.chooseNumber){
+                    self.playCard(true);
+                } else {
+                    self.playCard(false);
+                }
             } else {
                 gameObject.x = gameObject.input.dragStartX;
                 gameObject.y = gameObject.input.dragStartY;
@@ -118,22 +133,19 @@ export default class Game extends Phaser.Scene {
     initOtherComponent() {
         var self = this;
         let text = this.add.text(300, 10, 'Please enter your name');
-        let playerListLabel = this.add.text(300, 70, 'Player List:');
-        let playerList = this.add.text(450, 70, '');
+        this.add.text(300, 70, 'Player List:');
+        this.playerListText = this.add.text(450, 70, '');
         this.socket.on('playerState', function(list){
-            playerList.setText(list);
+            self.playerList = list;
+            self.playerListText.setText(list.map(player => player.name));
         });
         this.dealer = new Dealer(this);
         this.zone = new Zone(this);
         this.dropZone = this.zone.renderZone();
         this.outline = this.zone.renderOutline(this.dropZone);
-
         let element = this.add.dom(400, 0).createFromCache('nameform');
-
         element.addListener('click');
-
         element.on('click', function (event) {
-
             if (event.target.name === 'playButton')
             {
                 var inputText = this.getChildByName('nameField');
@@ -165,12 +177,31 @@ export default class Game extends Phaser.Scene {
             }
 
         });
-
         this.tweens.add({
             targets: element,
             y: 300,
             duration: 3000,
             ease: 'Power3'
         });
+    }
+
+    playCard(haveConfig, targetPlayer = null, chooseNumber = null){
+        if(haveConfig){
+            this.scene.pause('Game');
+            this.scene.add('SelectPlayer', SelectPlayer, true, {
+                gameObject: this.cardPlayed, playerList: this.playerList
+            });
+        } else {
+            this.dropZone.data.values.cards++;
+            this.cardPlayed.x = (this.dropZone.x - 350) + (this.dropZone.data.values.cards * 50);
+            this.cardPlayed.y = this.dropZone.y;
+            this.cardPlayed.disableInteractive();
+            this.socket.emit('cardPlayed', this.cardPlayed, targetPlayer, chooseNumber, this.cardPlayed.data.values);
+            if(this.hand[0] === this.cardPlayed.data.values.value){
+                this.hand.splice(0, 1);
+            } else {
+                this.hand.splice(1, 1);
+            }
+        }
     }
 }

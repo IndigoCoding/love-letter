@@ -9,6 +9,9 @@ export default class Dealer {
         this.dealCard = (cardValue, handSize = 0) => {
             let card = new Card(scene, cardValue);
             card.render(300 + handSize * 50, 550, cardMap[cardValue]);
+            return card;
         }
+
+        this.getTextureKey = cardValue => cardMap[cardValue];
     }
 }

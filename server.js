@@ -27,24 +27,116 @@ function shuffle(array) {
 }
 
 function startGame(){
-    players.forEach(function(p){
-        p.socket.emit('dealCard', deck.pop());
+    players.forEach(function(p, index){
+        dealCard(index);
     });
     dealCard(0);
     gameStarted = true;
 }
 
-function dealCard(position){
+function dealCard(position, afterDiscard = false){
     let card = deck.pop();
     players[position].socket.emit('dealCard', card);
     players[position].hand.push(card);
-    io.emit('currentTurn', players[position].id);
+    if(!afterDiscard){
+        io.emit('currentTurn', players[position].id);
+    }
     io.emit('deckRemaining', deck.length);
+}
+
+function emitPlayerInfo(player){
+    return {id: player.id, name: player.name, status: player.status, currentEffect: player.currentEffect};
+}
+
+function playerStateAnnounce(socket = null){
+    if(socket){
+        socket.emit('playerState', players.map(emitPlayerInfo));
+    } else {
+        io.emit('playerState', players.map(emitPlayerInfo));
+    }
+}
+
+function handleCardPlayed(gameObject, position, targetPlayer, chooseNumber){
+    let cardValue = parseInt(gameObject.data.value);
+    if(players[position].hand[0] === cardValue){
+        players[position].hand.splice(0, 1);
+    } else {
+        players[position].hand.splice(1, 1);
+    }
+    switch (cardValue){
+        case 4:
+            players[position].currentEffect = 4;
+            break;
+        case 1:
+            players.forEach(function(player, index){
+               if(player.id === targetPlayer){
+                   if (player.hand.includes(parseInt(chooseNumber))){
+                       console.log('in')
+                       players[index].status = false;
+                       io.emit('execute', player.id, chooseNumber, true);
+                   } else {
+                       console.log('missed');
+                       console.log(player.hand);
+                       console.log(chooseNumber);
+                       io.emit('execute', player.id, chooseNumber, false);
+                   }
+               }
+            });
+            break;
+        case 2:
+            players.forEach(function(player, index){
+                if(player.id === targetPlayer){
+                    players[position].socket.emit('handInfo', player.hand);
+                }
+            });
+            break;
+        case 3:
+            players.forEach(function(player, index){
+                if(player.id === targetPlayer){
+                    if(player.hand[0] < players[position].hand[0]){
+                        players[index].status = false;
+                        io.emit('execute', player.id, chooseNumber, true);
+                    } else if (player.hand[0] > players[position].hand[0]){
+                        players[position].status = false;
+                        io.emit('execute', player[position].id, chooseNumber, true);
+                    } else {
+                        io.emit('execute', player.id, chooseNumber, false);
+                    }
+                }
+            });
+            break;
+        case 5:
+            players.forEach(function(player, index){
+                if(player.id === targetPlayer){
+                    if(player.hand[0] === 8){
+                        players[index].status = false;
+                        io.emit('execute', player.id, chooseNumber, true);
+                    } else {
+                        io.emit('discard', player.id, chooseNumber);
+                        dealCard(index, true);
+                    }
+                }
+            });
+            break;
+        case 6:
+            players.forEach(function(player, index){
+                if(player.id === targetPlayer){
+                    let tmp;
+                    tmp = players[position][hand][0];
+                    players[position].hand[0] = players[index].hand[0];
+                    players[index].hand[0] = tmp;
+                    players[index].socket.emit('newHand', players[index].hand[0]);
+                    players[position].socket.emit('newHand', players[position].hand[0]);
+                }
+            });
+            break;
+    }
+    io.emit('playerState', players.map(emitPlayerInfo));
 }
 
 io.on('connection', function (socket) {
     console.log('A user connected: ' + socket.id);
-    socket.emit('playerState', players.map(player => player.name));
+    playerStateAnnounce(socket);
     if(gameStarted){
         socket.disconnect();
     }
@@ -53,7 +145,9 @@ io.on('connection', function (socket) {
         id: socket.id,
         socket: socket,
         name: null,
-        hand: []
+        hand: [],
+        currentEffect: [],
+        status: true
     });
 
     if (players.length === 1) {
@@ -73,10 +167,11 @@ io.on('connection', function (socket) {
                 return player;
             }
         })
-        io.emit('playerState', players.map(player => player.name));
+        playerStateAnnounce();
     })
 
-    socket.on('cardPlayed', function (gameObject) {
+    socket.on('cardPlayed', function (gameObject, targetPlayer, chooseNumber, cardData) {
+        gameObject.data = cardData;
         io.emit('cardPlayed', gameObject, socket.id);
         let position = 0;
         players.some(function(player, index){
@@ -85,6 +180,7 @@ io.on('connection', function (socket) {
                 return true;
             } else return false;
         })
+        handleCardPlayed(gameObject, position, targetPlayer, chooseNumber);
         if(position === players.length - 1){
             position = 0;
         } else {
