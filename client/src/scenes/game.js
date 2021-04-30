@@ -62,14 +62,16 @@ export default class Game extends Phaser.Scene {
 
         this.socket.on('execute', function(socketId, chooseNumber, isSuccessful){
             if(isSuccessful){
-                let sprite = self.dealer.getTextureKey(chooseNumber);
-                self.dropZone.data.values.cards++;
-                let card = new Card(self);
-                card.render(((self.dropZone.x - 350) + (self.dropZone.data.values.cards * 50)), (self.dropZone.y), sprite).disableInteractive();
-                if (socketId === self.socket.id){
-                    self.hand[0].destroy();
-                }
+               self.dropCardToDropZone(chooseNumber, socketId);
             }
+        })
+
+        this.socket.on('handInfo', function(player){
+            self.latestEventText.setText(`Player ${player.name} holds ${player.hand.join(',')}`);
+        })
+
+        this.socket.on('discard', function(socketId, discardNumber){
+            self.dropCardToDropZone(discardNumber, socketId);
         })
     }
 
@@ -133,38 +135,36 @@ export default class Game extends Phaser.Scene {
     initOtherComponent() {
         var self = this;
         let text = this.add.text(300, 10, 'Please enter your name');
+        this.add.text(600, 10, 'Latest event: ');
+        this.latestEventText = this.add.text(600, 70, '');
         this.add.text(300, 70, 'Player List:');
         this.playerListText = this.add.text(450, 70, '');
         this.socket.on('playerState', function(list){
             self.playerList = list;
             self.playerListText.setText(list.map(player => player.name));
+            if(list.filter(player => player.status).length === 1){
+
+            }
         });
         this.dealer = new Dealer(this);
         this.zone = new Zone(this);
         this.dropZone = this.zone.renderZone();
-        this.outline = this.zone.renderOutline(this.dropZone);
+        this.zone.renderOutline(this.dropZone);
         let element = this.add.dom(400, 0).createFromCache('nameform');
         element.addListener('click');
         element.on('click', function (event) {
-            if (event.target.name === 'playButton')
-            {
+            if (event.target.name === 'playButton') {
                 var inputText = this.getChildByName('nameField');
-
                 //  Have they entered anything?
-                if (inputText.value !== '')
-                {
+                if (inputText.value !== '') {
                     //  Turn off the click events
                     this.removeListener('click');
-
                     //  Hide the login element
                     this.setVisible(false);
-
                     //  Populate the text with whatever they typed in
                     text.setText('Welcome ' + inputText.value);
                     self.socket.emit('registerName', inputText.value);
-                }
-                else
-                {
+                } else {
                     //  Flash the prompt
                     this.scene.tweens.add({
                         targets: text,
@@ -175,7 +175,6 @@ export default class Game extends Phaser.Scene {
                     });
                 }
             }
-
         });
         this.tweens.add({
             targets: element,
@@ -202,6 +201,16 @@ export default class Game extends Phaser.Scene {
             } else {
                 this.hand.splice(1, 1);
             }
+        }
+    }
+
+    dropCardToDropZone(number, socketId = null){
+        let sprite = this.dealer.getTextureKey(number);
+        this.dropZone.data.values.cards++;
+        let card = new Card(this);
+        card.render(((this.dropZone.x - 350) + (this.dropZone.data.values.cards * 50)), (this.dropZone.y), sprite).disableInteractive();
+        if (socketId === this.socket.id){
+            this.hand[0].destroy();
         }
     }
 }

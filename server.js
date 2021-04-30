@@ -71,13 +71,9 @@ function handleCardPlayed(gameObject, position, targetPlayer, chooseNumber){
             players.forEach(function(player, index){
                if(player.id === targetPlayer){
                    if (player.hand.includes(parseInt(chooseNumber))){
-                       console.log('in')
                        players[index].status = false;
                        io.emit('execute', player.id, chooseNumber, true);
                    } else {
-                       console.log('missed');
-                       console.log(player.hand);
-                       console.log(chooseNumber);
                        io.emit('execute', player.id, chooseNumber, false);
                    }
                }
@@ -86,7 +82,10 @@ function handleCardPlayed(gameObject, position, targetPlayer, chooseNumber){
         case 2:
             players.forEach(function(player, index){
                 if(player.id === targetPlayer){
-                    players[position].socket.emit('handInfo', player.hand);
+                    players[position].socket.emit('handInfo', {
+                        hand: player.hand,
+                        name: player.name
+                    });
                 }
             });
             break;
@@ -95,12 +94,12 @@ function handleCardPlayed(gameObject, position, targetPlayer, chooseNumber){
                 if(player.id === targetPlayer){
                     if(player.hand[0] < players[position].hand[0]){
                         players[index].status = false;
-                        io.emit('execute', player.id, chooseNumber, true);
+                        io.emit('execute', player.id, player.hand[0], true);
                     } else if (player.hand[0] > players[position].hand[0]){
                         players[position].status = false;
-                        io.emit('execute', player[position].id, chooseNumber, true);
+                        io.emit('execute', players[position].id, players[position].hand[0], true);
                     } else {
-                        io.emit('execute', player.id, chooseNumber, false);
+                        io.emit('execute', player.id, null, false);
                     }
                 }
             });
@@ -110,9 +109,9 @@ function handleCardPlayed(gameObject, position, targetPlayer, chooseNumber){
                 if(player.id === targetPlayer){
                     if(player.hand[0] === 8){
                         players[index].status = false;
-                        io.emit('execute', player.id, chooseNumber, true);
+                        io.emit('execute', player.id, 8, true);
                     } else {
-                        io.emit('discard', player.id, chooseNumber);
+                        io.emit('discard', player.id, players[index].hand.pop());
                         dealCard(index, true);
                     }
                 }
@@ -122,7 +121,7 @@ function handleCardPlayed(gameObject, position, targetPlayer, chooseNumber){
             players.forEach(function(player, index){
                 if(player.id === targetPlayer){
                     let tmp;
-                    tmp = players[position][hand][0];
+                    tmp = players[position].hand[0];
                     players[position].hand[0] = players[index].hand[0];
                     players[index].hand[0] = tmp;
                     players[index].socket.emit('newHand', players[index].hand[0]);
@@ -181,10 +180,15 @@ io.on('connection', function (socket) {
             } else return false;
         })
         handleCardPlayed(gameObject, position, targetPlayer, chooseNumber);
-        if(position === players.length - 1){
-            position = 0;
-        } else {
-            position += 1;
+        while(true){
+            if(position === players.length - 1){
+                position = 0;
+            } else {
+                position += 1;
+            }
+            if(players[position].status){
+                break;
+            }
         }
         dealCard(position);
     });

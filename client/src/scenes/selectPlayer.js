@@ -30,12 +30,20 @@ export default class SelectPlayer extends Phaser.Scene {
         let selectPlayer = this.add.dom(100, 100).createFromHTML(
             `<select class="form-control" id="selectPlayer" name="selectPlayer">${el}</select>`
         );
-        this.add.text(100, 150, 'Choose number', {fill: 'black'});
-        let chooseNumber = this.add.dom(100, 200).createFromCache('chooseNumber');
+
+        if(this.gameObject.data.values.config.chooseNumber){
+            this.add.text(100, 150, 'Choose number', {fill: 'black'});
+            var chooseNumber = this.add.dom(100, 200).createFromCache('chooseNumber');
+        }
+
         let button = this.add.text(100, 300, 'Commit', {fill: 'black', backgroundColor: 'orange'}).setInteractive();
         button.on('pointerdown', function() {
             self.scene.resume('Game');
-            self.scene.get('Game').playCard(false, selectPlayer.node.firstElementChild.value, chooseNumber.node.firstElementChild.value);
+            if(self.gameObject.data.values.config.chooseNumber) {
+                self.scene.get('Game').playCard(false, selectPlayer.node.firstElementChild.value, chooseNumber.node.firstElementChild.value);
+            } else {
+                self.scene.get('Game').playCard(false, selectPlayer.node.firstElementChild.value);
+            }
             self.scene.remove('SelectPlayer');
         });
     }
