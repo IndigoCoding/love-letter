@@ -26,18 +26,18 @@ export default class Game extends Phaser.Scene {
     create() {
         let self = this;
         this.isPlayerA = false;
-        this.isMyTurn = false;
         this.hand = [];
         this.handSize = 0;
         this.playerList = [];
         this.socket = io('http://localhost:3000');
+        this.currentPlayerTurn = null;
 
         this.initDealText();
         this.initOtherComponent();
         this.initPlayCardEvent();
 
-        this.socket.on('currentTurn', function(id){
-            self.isMyTurn = self.socket.id === id;
+        this.socket.on('currentTurn', function(socketId){
+            self.currentPlayerTurn = self.playerList.find(player => player.id === socketId);
         })
 
         this.socket.on('isPlayerA', function () {
@@ -72,6 +72,12 @@ export default class Game extends Phaser.Scene {
 
         this.socket.on('discard', function(socketId, discardNumber){
             self.dropCardToDropZone(discardNumber, socketId);
+        })
+
+        this.socket.on('newHand', function(number){
+            self.hand[0].destroy();
+            self.hand = [self.dealer.dealCard(number, self.handSize)];
+            self.latestEventText.setText(`You just switch card with ${self.currentPlayerTurn.name}`);
         })
     }
 
@@ -118,7 +124,7 @@ export default class Game extends Phaser.Scene {
         })
 
         this.input.on('drop', function (pointer, gameObject, dropZone) {
-            if(self.isMyTurn){
+            if(self.currentPlayerTurn.id === self.socket.id){
                 self.cardPlayed = gameObject;
                 if(gameObject.data.values.config.targetPlayer || gameObject.data.values.config.chooseNumber){
                     self.playCard(true);
@@ -185,6 +191,11 @@ export default class Game extends Phaser.Scene {
     }
 
     playCard(haveConfig, targetPlayer = null, chooseNumber = null){
+        if(this.hand[0] === this.cardPlayed.data.values.value){
+            this.hand.splice(0, 1);
+        } else {
+            this.hand.splice(1, 1);
+        }
         if(haveConfig){
             this.scene.pause('Game');
             this.scene.add('SelectPlayer', SelectPlayer, true, {
@@ -196,11 +207,6 @@ export default class Game extends Phaser.Scene {
             this.cardPlayed.y = this.dropZone.y;
             this.cardPlayed.disableInteractive();
             this.socket.emit('cardPlayed', this.cardPlayed, targetPlayer, chooseNumber, this.cardPlayed.data.values);
-            if(this.hand[0] === this.cardPlayed.data.values.value){
-                this.hand.splice(0, 1);
-            } else {
-                this.hand.splice(1, 1);
-            }
         }
     }
 
@@ -210,6 +216,8 @@ export default class Game extends Phaser.Scene {
         let card = new Card(this);
         card.render(((this.dropZone.x - 350) + (this.dropZone.data.values.cards * 50)), (this.dropZone.y), sprite).disableInteractive();
         if (socketId === this.socket.id){
+            console.log('in dropCard true');
+            console.log(this.hand);
             this.hand[0].destroy();
         }
     }

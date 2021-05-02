@@ -129,6 +129,7 @@ function handleCardPlayed(gameObject, position, targetPlayer, chooseNumber){
                 }
             });
             break;
+        default:
     }
     io.emit('playerState', players.map(emitPlayerInfo));
 }
